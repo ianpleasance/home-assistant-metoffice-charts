@@ -1,0 +1,173 @@
+# Met Office Weather Charts - Vertical Layout (Indented for views:)
+# Copy everything below and paste under your views: line
+
+  - title: Met Office Charts
+    path: met-office-charts
+    icon: mdi:weather-partly-cloudy
+    badges: []
+    cards:
+      # Header Card
+      - type: markdown
+        content: |
+          # 🌦️ Met Office Weather Charts
+          
+          Live weather map images from Met Office DataHub
+          
+          **Order ID:** o181029737325 | **Model:** UK Map Images
+        
+      # Status Overview
+      - type: entities
+        title: Chart Status
+        show_header_toggle: false
+        entities:
+          - entity: image.met_office_cloud_amount_total
+            type: attribute
+            attribute: last_updated
+            name: Last Updated
+            icon: mdi:clock-outline
+          - entity: image.met_office_cloud_amount_total
+            type: attribute
+            attribute: model_id
+            name: Model
+            icon: mdi:weather-partly-cloudy
+          - entity: image.met_office_cloud_amount_total
+            type: attribute
+            attribute: run_time
+            name: Model Run Time
+            icon: mdi:calendar-clock
+          - entity: image.met_office_cloud_amount_total
+            type: attribute
+            attribute: attribution
+            name: Data Source
+            icon: mdi:information-outline
+
+      # Cloud Cover Chart
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: |
+              ### ☁️ Cloud Amount Total
+          - type: picture-entity
+            entity: image.met_office_cloud_amount_total
+            show_state: false
+            show_name: false
+            camera_view: auto
+          - type: entities
+            entities:
+              - entity: image.met_office_cloud_amount_total
+                type: attribute
+                attribute: last_updated
+                name: Last Updated
+                icon: mdi:update
+              - entity: image.met_office_cloud_amount_total
+                type: attribute
+                attribute: run_time
+                name: Model Run
+                icon: mdi:clock-outline
+
+      # Pressure Chart
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: |
+              ### 🌡️ Mean Sea Level Pressure
+          - type: picture-entity
+            entity: image.met_office_mean_sea_level_pressure
+            show_state: false
+            show_name: false
+            camera_view: auto
+          - type: entities
+            entities:
+              - entity: image.met_office_mean_sea_level_pressure
+                type: attribute
+                attribute: last_updated
+                name: Last Updated
+                icon: mdi:update
+              - entity: image.met_office_mean_sea_level_pressure
+                type: attribute
+                attribute: run_time
+                name: Model Run
+                icon: mdi:clock-outline
+
+      # Precipitation Chart
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: |
+              ### 🌧️ Total Precipitation Rate
+          - type: picture-entity
+            entity: image.met_office_total_precipitation_rate
+            show_state: false
+            show_name: false
+            camera_view: auto
+          - type: entities
+            entities:
+              - entity: image.met_office_total_precipitation_rate
+                type: attribute
+                attribute: last_updated
+                name: Last Updated
+                icon: mdi:update
+              - entity: image.met_office_total_precipitation_rate
+                type: attribute
+                attribute: run_time
+                name: Model Run
+                icon: mdi:clock-outline
+
+      # Temperature Chart
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: |
+              ### 🌡️ Temperature at Surface
+          - type: picture-entity
+            entity: image.met_office_temperature_at_surface
+            show_state: false
+            show_name: false
+            camera_view: auto
+          - type: entities
+            entities:
+              - entity: image.met_office_temperature_at_surface
+                type: attribute
+                attribute: last_updated
+                name: Last Updated
+                icon: mdi:update
+              - entity: image.met_office_temperature_at_surface
+                type: attribute
+                attribute: run_time
+                name: Model Run
+                icon: mdi:clock-outline
+
+      # Land Cover Chart
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: |
+              ### 🗺️ Land Cover Mask
+          - type: picture-entity
+            entity: image.met_office_land_cover
+            show_state: false
+            show_name: false
+            camera_view: auto
+          - type: entities
+            entities:
+              - entity: image.met_office_land_cover
+                type: attribute
+                attribute: last_updated
+                name: Last Updated
+                icon: mdi:update
+              - entity: image.met_office_land_cover
+                type: attribute
+                attribute: run_time
+                name: Model Run
+                icon: mdi:clock-outline
+
+      # Manual Refresh Button
+      - type: button
+        name: Refresh All Charts
+        icon: mdi:refresh
+        tap_action:
+          action: call-service
+          service: metoffice_charts.refresh_all
+        show_state: false
+        show_icon: true
+

@@ -1,0 +1,181 @@
+# Met Office Weather Charts - Simple Dashboard (Indented for views:)
+# Copy everything below and paste under your views: line
+
+  - title: Met Office Weather
+    path: met-office-weather
+    icon: mdi:weather-partly-cloudy
+    badges: []
+    cards:
+      # Header Card with Status
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: |
+              # 🌦️ Met Office Weather Charts
+              
+              Live weather map images from Met Office DataHub UK & Europe
+              
+          - type: glance
+            title: Chart Information
+            show_name: true
+            show_state: false
+            entities:
+              - entity: image.met_office_cloud_amount_total
+                name: Last Updated
+                icon: mdi:update
+              - entity: image.met_office_cloud_amount_total
+                name: Attribution
+                icon: mdi:information
+
+      # All Charts in Grid Layout (2 columns)
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          
+          # Cloud Amount Total
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: "### ☁️ Cloud Amount Total"
+              - type: picture-entity
+                entity: image.met_office_cloud_amount_total
+                show_state: false
+                show_name: false
+                camera_view: auto
+                tap_action:
+                  action: more-info
+              - type: glance
+                show_name: false
+                show_state: false
+                entities:
+                  - entity: image.met_office_cloud_amount_total
+                    name: Updated
+                    icon: mdi:clock-outline
+          
+          # Mean Sea Level Pressure
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: "### 🌡️ Mean Sea Level Pressure"
+              - type: picture-entity
+                entity: image.met_office_mean_sea_level_pressure
+                show_state: false
+                show_name: false
+                camera_view: auto
+                tap_action:
+                  action: more-info
+              - type: glance
+                show_name: false
+                show_state: false
+                entities:
+                  - entity: image.met_office_mean_sea_level_pressure
+                    name: Updated
+                    icon: mdi:clock-outline
+          
+          # Total Precipitation Rate
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: "### 🌧️ Total Precipitation Rate"
+              - type: picture-entity
+                entity: image.met_office_total_precipitation_rate
+                show_state: false
+                show_name: false
+                camera_view: auto
+                tap_action:
+                  action: more-info
+              - type: glance
+                show_name: false
+                show_state: false
+                entities:
+                  - entity: image.met_office_total_precipitation_rate
+                    name: Updated
+                    icon: mdi:clock-outline
+          
+          # Temperature at Surface
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: "### 🌡️ Temperature at Surface"
+              - type: picture-entity
+                entity: image.met_office_temperature_at_surface
+                show_state: false
+                show_name: false
+                camera_view: auto
+                tap_action:
+                  action: more-info
+              - type: glance
+                show_name: false
+                show_state: false
+                entities:
+                  - entity: image.met_office_temperature_at_surface
+                    name: Updated
+                    icon: mdi:clock-outline
+
+      # Land Cover (Full Width)
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "### 🗺️ Land Cover Mask"
+          - type: picture-entity
+            entity: image.met_office_land_cover
+            show_state: false
+            show_name: false
+            camera_view: auto
+            tap_action:
+              action: more-info
+          - type: glance
+            show_name: false
+            show_state: false
+            entities:
+              - entity: image.met_office_land_cover
+                name: Updated
+                icon: mdi:clock-outline
+
+      # Detailed Information Panel
+      - type: entities
+        title: Detailed Information
+        show_header_toggle: false
+        state_color: false
+        entities:
+          - type: section
+            label: Cloud Amount Total
+          - entity: image.met_office_cloud_amount_total
+            type: attribute
+            attribute: last_updated
+            name: Last Updated
+          - entity: image.met_office_cloud_amount_total
+            type: attribute
+            attribute: run_time
+            name: Model Run Time
+          - entity: image.met_office_cloud_amount_total
+            type: attribute
+            attribute: model_id
+            name: Model ID
+          - entity: image.met_office_cloud_amount_total
+            type: attribute
+            attribute: file_path
+            name: File Path
+          
+          - type: section
+            label: Actions
+          - type: button
+            name: Refresh All Charts
+            icon: mdi:refresh
+            action_name: Refresh
+            tap_action:
+              action: call-service
+              service: metoffice_charts.refresh_all
+
+      # Attribution Footer
+      - type: markdown
+        content: |
+          ---
+          
+          **Data Source:** Met Office DataHub  
+          **Attribution:** © Crown Copyright, Met Office  
+          **Model:** {{ state_attr('image.met_office_cloud_amount_total', 'model_id') }}  
+          **Order ID:** {{ state_attr('image.met_office_cloud_amount_total', 'order_id') }}  
+          **Last Update:** {{ state_attr('image.met_office_cloud_amount_total', 'last_updated') }}
+
