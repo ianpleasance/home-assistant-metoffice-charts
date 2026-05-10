@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Met Office Charts Konfiguration",
+        "description": "Konfigurieren Sie Ihre Met Office DataHub-Anmeldeinformationen.\n\nSie benötigen ein DataHub-Konto mit einem Map Images-Abonnement. Registrieren Sie sich unter: {register_url}\n\nAktualisierungsintervall in Minuten (min: {min_interval}, max: {max_interval}).",
+        "data": {
+          "api_key": "DataHub API-Schlüssel",
+          "order_id": "Bestellungs-ID",
+          "scan_interval": "Aktualisierungsintervall (Minuten)"
+        },
+        "data_description": {
+          "api_key": "Ihr Met Office DataHub API-Schlüssel aus den Kontoeinstellungen",
+          "order_id": "Bestellungsname in Kleinbuchstaben mit Bindestrichen (z.B. 'meine-wetterkarten')",
+          "scan_interval": "Wie oft nach neuen Kartenbildern gesucht wird"
+        }
+      }
+    },
+    "error": {
+      "invalid_api_key": "Ungültiger API-Schlüssel. Bitte überprüfen Sie Ihre DataHub-Kontoeinstellungen.",
+      "order_not_found": "Bestellungs-ID nicht gefunden. Bitte überprüfen Sie, ob die Bestellung in Ihrem DataHub-Konto existiert.",
+      "cannot_connect": "Verbindung zum Met Office DataHub nicht möglich. Bitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut."
+    },
+    "abort": {
+      "already_configured": "Diese Bestellung ist bereits konfiguriert"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Met Office Charts Optionen",
+        "description": "Aktualisieren Sie das Aktualisierungsintervall für Met Office Charts.\n\nAktualisierungsintervall in Minuten (min: {min_interval}, max: {max_interval}).",
+        "data": {
+          "scan_interval": "Aktualisierungsintervall (Minuten)"
+        },
+        "data_description": {
+          "scan_interval": "Wie oft nach neuen Kartenbildern gesucht wird"
+        }
+      }
+    }
+  },
+  "services": {
+    "refresh_order": {
+      "name": "Bestellung aktualisieren",
+      "description": "Manuell neue Wetterkarten für eine bestimmte Bestellung abrufen",
+      "fields": {
+        "order_id": {
+          "name": "Bestellungs-ID",
+          "description": "Die zu aktualisierende Bestellungs-ID"
+        }
+      }
+    },
+    "refresh_all": {
+      "name": "Alle aktualisieren",
+      "description": "Manuell neue Wetterkarten für alle konfigurierten Bestellungen abrufen"
+    }
+  }
+}

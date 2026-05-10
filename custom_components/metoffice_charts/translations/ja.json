@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Met Office Charts Configuration",
+        "description": "Configure your Met Office DataHub credentials.\n\nYou need a DataHub account with a Map Images subscription. Register at: {register_url}\n\nRefresh interval is in minutes (min: {min_interval}, max: {max_interval}).",
+        "data": {
+          "api_key": "DataHub API Key",
+          "order_id": "Order ID",
+          "scan_interval": "Refresh interval (minutes)"
+        },
+        "data_description": {
+          "api_key": "Your Met Office DataHub API key from account settings",
+          "order_id": "Order name in lowercase with hyphens (e.g., 'my-weather-maps')",
+          "scan_interval": "How often to check for new chart images"
+        }
+      }
+    },
+    "error": {
+      "invalid_api_key": "Invalid API key. Please check your DataHub account settings.",
+      "order_not_found": "Order ID not found. Please check the order exists in your DataHub account.",
+      "cannot_connect": "Unable to connect to Met Office DataHub. Please check your internet connection and try again.",
+      "unknown": "An unexpected error occurred. Please try again."
+    },
+    "abort": {
+      "already_configured": "This order is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Met Office Charts Options",
+        "description": "Update the refresh interval for Met Office Charts.\n\nRefresh interval is in minutes (min: {min_interval}, max: {max_interval}).",
+        "data": {
+          "scan_interval": "Refresh interval (minutes)"
+        },
+        "data_description": {
+          "scan_interval": "How often to check for new chart images"
+        }
+      }
+    }
+  },
+  "services": {
+    "refresh_order": {
+      "name": "Refresh Order",
+      "description": "Manually fetch new weather charts for a specific order",
+      "fields": {
+        "order_id": {
+          "name": "Order ID",
+          "description": "The order ID to refresh"
+        }
+      }
+    },
+    "refresh_all": {
+      "name": "Refresh All",
+      "description": "Manually fetch new weather charts for all configured orders"
+    }
+  }
+}

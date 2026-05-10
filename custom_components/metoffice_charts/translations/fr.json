@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configuration Met Office Charts",
+        "description": "Configurez vos identifiants Met Office DataHub.\n\nVous avez besoin d'un compte DataHub avec un abonnement Map Images. Inscrivez-vous sur : {register_url}\n\nIntervalle de rafraîchissement en minutes (min : {min_interval}, max : {max_interval}).",
+        "data": {
+          "api_key": "Clé API DataHub",
+          "order_id": "ID de commande",
+          "scan_interval": "Intervalle de rafraîchissement (minutes)"
+        },
+        "data_description": {
+          "api_key": "Votre clé API Met Office DataHub depuis les paramètres du compte",
+          "order_id": "Nom de la commande en minuscules avec des traits d'union (ex : 'mes-cartes-meteo')",
+          "scan_interval": "Fréquence de vérification des nouvelles images de cartes"
+        }
+      }
+    },
+    "error": {
+      "invalid_api_key": "Clé API invalide. Veuillez vérifier les paramètres de votre compte DataHub.",
+      "order_not_found": "ID de commande introuvable. Veuillez vérifier que la commande existe dans votre compte DataHub.",
+      "cannot_connect": "Impossible de se connecter au Met Office DataHub. Veuillez vérifier votre connexion Internet et réessayer.",
+      "unknown": "Une erreur inattendue s'est produite. Veuillez réessayer."
+    },
+    "abort": {
+      "already_configured": "Cette commande est déjà configurée"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options Met Office Charts",
+        "description": "Mettez à jour l'intervalle de rafraîchissement pour Met Office Charts.\n\nIntervalle de rafraîchissement en minutes (min : {min_interval}, max : {max_interval}).",
+        "data": {
+          "scan_interval": "Intervalle de rafraîchissement (minutes)"
+        },
+        "data_description": {
+          "scan_interval": "Fréquence de vérification des nouvelles images de cartes"
+        }
+      }
+    }
+  },
+  "services": {
+    "refresh_order": {
+      "name": "Actualiser la commande",
+      "description": "Récupérer manuellement de nouvelles cartes météo pour une commande spécifique",
+      "fields": {
+        "order_id": {
+          "name": "ID de commande",
+          "description": "L'ID de commande à actualiser"
+        }
+      }
+    },
+    "refresh_all": {
+      "name": "Tout actualiser",
+      "description": "Récupérer manuellement de nouvelles cartes météo pour toutes les commandes configurées"
+    }
+  }
+}

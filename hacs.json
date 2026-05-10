@@ -1,0 +1,5 @@
+{
+  "name": "Met Office Charts",
+  "render_readme": true,
+  "domains": ["image"]
+}
