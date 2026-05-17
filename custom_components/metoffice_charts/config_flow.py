@@ -1,174 +1,160 @@
-"""Config flow for Met Office Charts integration."""
+"""Config flow for MAVIS Aviation Charts."""
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-import aiohttp
 import voluptuous as vol
 
+from .auth import authenticate
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+import homeassistant.helpers.config_validation as cv
 
 from .const import (
-    CONF_API_KEY,
-    CONF_ORDER_ID,
-    CONF_SCAN_INTERVAL,
-    DATAHUB_BASE_URL,
-    DEFAULT_SCAN_INTERVAL,
     DOMAIN,
-    MAX_SCAN_INTERVAL,
+    CONF_AUTH_TOKEN,
+    CONF_USERNAME,
+    CONF_PASSWORD,
+    CONF_CHARTS,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
+    MAX_SCAN_INTERVAL,
+    CHART_DEFINITIONS,
+    DEFAULT_CHARTS,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class MetOfficeChartsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Met Office Charts."""
+
+
+
+
+
+class MavisChartsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for MAVIS Aviation Charts."""
 
     VERSION = 1
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle the initial step."""
-        errors = {}
+        """Single step — credentials and chart selection."""
+        errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Validate the API key and order ID
-            api_key = user_input[CONF_API_KEY]
-            order_id = user_input[CONF_ORDER_ID]
+            username = user_input[CONF_USERNAME].strip()
+            password = user_input[CONF_PASSWORD]
 
-            validation_result = await self._validate_credentials(api_key, order_id)
-
-            if validation_result is True:
-                # Create unique ID from order_id
-                await self.async_set_unique_id(f"{DOMAIN}_{order_id}")
-                self._abort_if_unique_id_configured()
-
+            auth_token = await self.hass.async_add_executor_job(
+                authenticate, username, password
+            )
+            if auth_token:
+                selected = user_input.get(CONF_CHARTS, DEFAULT_CHARTS) or DEFAULT_CHARTS
                 return self.async_create_entry(
-                    title=f"Met Office Charts ({order_id})",
-                    data=user_input,
+                    title="MAVIS Aviation Charts",
+                    data={
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: password,
+                        CONF_AUTH_TOKEN: auth_token,
+                        CONF_CHARTS: selected,
+                        CONF_SCAN_INTERVAL: user_input.get(
+                            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+                        ),
+                    },
                 )
             else:
-                errors["base"] = validation_result
+                errors["base"] = "invalid_auth"
 
-        data_schema = vol.Schema(
-            {
-                vol.Required(CONF_API_KEY): str,
-                vol.Required(CONF_ORDER_ID): str,
-                vol.Required(
-                    CONF_SCAN_INTERVAL,
-                    default=DEFAULT_SCAN_INTERVAL,
-                ): vol.All(
-                    vol.Coerce(int),
-                    vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL),
-                ),
-            }
-        )
+        chart_options = {
+            key: f"{defn[0]} — {defn[1]}"
+            for key, defn in CHART_DEFINITIONS.items()
+        }
+
+        schema = vol.Schema({
+            vol.Required(CONF_USERNAME): str,
+            vol.Required(CONF_PASSWORD): str,
+            vol.Required(CONF_CHARTS, default=DEFAULT_CHARTS): cv.multi_select(chart_options),
+            vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(
+                vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL)
+            ),
+        })
 
         return self.async_show_form(
             step_id="user",
-            data_schema=data_schema,
+            data_schema=schema,
             errors=errors,
-            description_placeholders={
-                "register_url": "https://datahub.metoffice.gov.uk/",
-                "min_interval": str(MIN_SCAN_INTERVAL),
-                "max_interval": str(MAX_SCAN_INTERVAL),
-            },
         )
-
-    async def _validate_credentials(
-        self, api_key: str, order_id: str
-    ) -> bool | str:
-        """Validate the DataHub API credentials.
-
-        Returns True if valid, or an error key string if invalid.
-        """
-        try:
-            session = async_get_clientsession(self.hass)
-            # Test with a files list request
-            test_url = f"{DATAHUB_BASE_URL}/orders/{order_id}/latest"
-            headers = {"apikey": api_key}
-
-            async with session.get(
-                test_url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
-            ) as response:
-                if response.status == 200:
-                    return True
-                elif response.status == 401:
-                    _LOGGER.warning("Invalid API key for order %s", order_id)
-                    return "invalid_api_key"
-                elif response.status == 404:
-                    _LOGGER.warning("Order %s not found", order_id)
-                    return "order_not_found"
-                else:
-                    _LOGGER.warning(
-                        "API validation failed with status %d for order %s",
-                        response.status,
-                        order_id,
-                    )
-                    return "cannot_connect"
-
-        except aiohttp.ClientError as err:
-            _LOGGER.error("Network error validating credentials: %s", err)
-            return "cannot_connect"
-        except Exception as err:  # pylint: disable=broad-except
-            _LOGGER.exception("Unexpected error validating credentials: %s", err)
-            return "unknown"
 
     @staticmethod
     @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
-    ) -> config_entries.OptionsFlow:
-        return MetOfficeChartsOptionsFlow() 
+    ) -> MavisChartsOptionsFlow:
+        """Return the options flow."""
+        return MavisChartsOptionsFlow()
 
 
-class MetOfficeChartsOptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow for Met Office Charts."""
+class MavisChartsOptionsFlow(config_entries.OptionsFlow):
+    """Handle options for MAVIS Aviation Charts."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage the options."""
+        """Manage options."""
+        errors: dict[str, str] = {}
+        current = {**self.config_entry.data, **self.config_entry.options}
+
         if user_input is not None:
-            # Update the config entry
-            updated_data = {
-                **self.config_entry.data,
-                CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
-            }
+            username = user_input[CONF_USERNAME].strip()
+            password = user_input[CONF_PASSWORD]
 
-            self.hass.config_entries.async_update_entry(
-                self.config_entry, data=updated_data
+            auth_token = await self.hass.async_add_executor_job(
+                authenticate, username, password
             )
+            if auth_token:
+                new_data = {
+                    **current,
+                    CONF_USERNAME: username,
+                    CONF_PASSWORD: password,
+                    CONF_AUTH_TOKEN: auth_token,
+                    CONF_CHARTS: [
+                        k for k in user_input.get(CONF_CHARTS, DEFAULT_CHARTS)
+                        if k in CHART_DEFINITIONS
+                    ],
+                    CONF_SCAN_INTERVAL: user_input.get(
+                        CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+                    ),
+                }
+                return self.async_create_entry(title="MAVIS Aviation Charts", data=new_data)
+            else:
+                errors["base"] = "invalid_auth"
 
-            return self.async_create_entry(title="", data={})
+        chart_options = {
+            key: f"{defn[0]} — {defn[1]}"
+            for key, defn in CHART_DEFINITIONS.items()
+        }
 
-        current_interval = self.config_entry.data.get(
-            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
-        )
-
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_SCAN_INTERVAL,
-                    default=current_interval,
-                ): vol.All(
-                    vol.Coerce(int),
-                    vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL),
-                ),
-            }
-        )
+        schema = vol.Schema({
+            vol.Required(CONF_USERNAME, default=current.get(CONF_USERNAME, "")): str,
+            vol.Required(CONF_PASSWORD): str,
+            vol.Required(
+                CONF_CHARTS,
+                default=[k for k in current.get(CONF_CHARTS, DEFAULT_CHARTS) if k in CHART_DEFINITIONS],
+            ): cv.multi_select(chart_options),
+            vol.Optional(
+                CONF_SCAN_INTERVAL,
+                default=current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+            ): vol.All(
+                vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL)
+            ),
+        })
 
         return self.async_show_form(
             step_id="init",
             data_schema=schema,
-            description_placeholders={
-                "min_interval": str(MIN_SCAN_INTERVAL),
-                "max_interval": str(MAX_SCAN_INTERVAL),
-            },
+            errors=errors,
         )

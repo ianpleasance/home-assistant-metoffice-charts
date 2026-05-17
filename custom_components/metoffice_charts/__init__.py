@@ -1,170 +1,99 @@
-"""The Met Office Charts integration."""
+"""The MAVIS Aviation Charts integration."""
 from __future__ import annotations
 
 import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import entity_registry as er
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import voluptuous as vol
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
-    CONF_API_KEY,
-    CONF_ORDER_ID,
-    CONF_SCAN_INTERVAL,
-    DEFAULT_SCAN_INTERVAL,
     DOMAIN,
-    SERVICE_REFRESH_ALL,
-    SERVICE_REFRESH_ORDER,
+    CONF_AUTH_TOKEN,
+    CONF_USERNAME,
+    CONF_PASSWORD,
+    CONF_CHARTS,
+    CONF_SCAN_INTERVAL,
 )
-from .coordinator import MetOfficeChartsCoordinator
+try:
+    from .coordinator import MavisChartsCoordinator
+except Exception as _import_err:
+    import logging
+    logging.getLogger(__name__).exception("Failed to import coordinator: %s", _import_err)
+    raise
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.IMAGE]
+PLATFORMS = [Platform.IMAGE, Platform.SENSOR]
+
+
+def _entry_data(entry: ConfigEntry) -> dict:
+    """Return merged entry data, with options taking precedence."""
+    return {**entry.data, **entry.options}
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Met Office Charts from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-
+    """Set up MAVIS Aviation Charts from a config entry."""
+    data = _entry_data(entry)
     session = async_get_clientsession(hass)
 
-    scan_interval = entry.options.get(
-        CONF_SCAN_INTERVAL,
-        entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-    )
-
-    coordinator = MetOfficeChartsCoordinator(
+    coordinator = MavisChartsCoordinator(
         hass,
         session,
-        api_key=entry.data[CONF_API_KEY],
-        order_id=entry.data[CONF_ORDER_ID],
-        scan_interval=scan_interval,
+        username=data.get(CONF_USERNAME, ""),
+        password=data.get(CONF_PASSWORD, ""),
+        charts=data.get(CONF_CHARTS, []),
+        scan_interval=data.get(CONF_SCAN_INTERVAL, 60),
+        entry_id=entry.entry_id,
+        auth_token=data.get(CONF_AUTH_TOKEN, ""),
     )
 
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data[DOMAIN][entry.entry_id] = {
-        "coordinator": coordinator,
-        CONF_ORDER_ID: entry.data[CONF_ORDER_ID],
-    }
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Setup options update listener
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
-
-    # Register services (once)
-    if not hass.data[DOMAIN].get("_services_registered"):
-        await async_setup_services(hass)
-        hass.data[DOMAIN]["_services_registered"] = True
-
-    _LOGGER.info(
-        "Set up Met Office Charts for order '%s' with %d minute refresh interval",
-        entry.data[CONF_ORDER_ID],
-        scan_interval,
-    )
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
-
-        # Remove services if this was the last entry
-        if len([k for k in hass.data[DOMAIN].keys() if k != "_services_registered"]) == 0:
-            hass.services.async_remove(DOMAIN, SERVICE_REFRESH_ORDER)
-            hass.services.async_remove(DOMAIN, SERVICE_REFRESH_ALL)
-            hass.data[DOMAIN].pop("_services_registered", None)
-
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry."""
-    # Clean up entities if order_id changed (shouldn't happen, but handle it)
-    entity_reg = er.async_get(hass)
+    """Reload config entry when options change, cleaning up removed chart entities."""
+    data = _entry_data(entry)
+    new_charts = data.get(CONF_CHARTS, [])
 
-    old_order_id = entry.options.get("_old_order_id", entry.data.get(CONF_ORDER_ID))
-    new_order_id = entry.data.get(CONF_ORDER_ID)
+    coordinator: MavisChartsCoordinator | None = hass.data.get(DOMAIN, {}).get(
+        entry.entry_id
+    )
 
-    if old_order_id and old_order_id != new_order_id:
-        _LOGGER.info(
-            "Order ID changed from %s to %s - removing old entities",
-            old_order_id,
-            new_order_id,
-        )
-        to_remove = []
-        for entity_entry in list(entity_reg.entities.values()):
-            if (
-                entity_entry.config_entry_id == entry.entry_id
-                and f"_{old_order_id}_" in entity_entry.unique_id
-            ):
-                to_remove.append(entity_entry.entity_id)
-
-        for entity_id in to_remove:
-            entity_reg.async_remove(entity_id)
-
-        _LOGGER.info("Removed %d entities for old order %s", len(to_remove), old_order_id)
-
-        # Store current order_id for future comparisons
-        updated_options = {**entry.options, "_old_order_id": new_order_id}
-        hass.config_entries.async_update_entry(entry, options=updated_options)
+    if coordinator:
+        old_charts = coordinator.charts
+        removed = set(old_charts) - set(new_charts)
+        if removed:
+            ent_reg = er.async_get(hass)
+            for chart_key in removed:
+                for platform in ("image", "sensor"):
+                    unique_id = f"{entry.entry_id}_{chart_key}_{platform}"
+                    entity_id = ent_reg.async_get_entity_id(platform, DOMAIN, unique_id)
+                    if entity_id:
+                        ent_reg.async_remove(entity_id)
+                        _LOGGER.debug(
+                            "Removed entity %s for deselected chart %s",
+                            entity_id, chart_key,
+                        )
+            coordinator.update_charts(new_charts)
 
     await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)
-
-
-async def async_setup_services(hass: HomeAssistant) -> None:
-    """Set up services for the integration."""
-
-    async def handle_refresh_order(call: ServiceCall) -> None:
-        """Handle refresh order service call."""
-        order_id = call.data[CONF_ORDER_ID]
-
-        for entry_id, data in hass.data[DOMAIN].items():
-            if isinstance(data, dict) and data.get(CONF_ORDER_ID) == order_id:
-                coordinator = data["coordinator"]
-                _LOGGER.info("Manually refreshing order %s", order_id)
-                await coordinator.async_request_refresh()
-                return
-
-        _LOGGER.warning("Order %s not found in configured orders", order_id)
-
-    async def handle_refresh_all(call: ServiceCall) -> None:
-        """Handle refresh all orders service call."""
-        _LOGGER.info("Manually refreshing all Met Office Charts orders")
-
-        for entry_id, data in hass.data[DOMAIN].items():
-            if not isinstance(data, dict) or CONF_ORDER_ID not in data:
-                continue
-
-            coordinator = data["coordinator"]
-            order_id = data[CONF_ORDER_ID]
-            _LOGGER.info("Refreshing order %s", order_id)
-            await coordinator.async_request_refresh()
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_REFRESH_ORDER,
-        handle_refresh_order,
-        schema=vol.Schema(
-            {
-                vol.Required(CONF_ORDER_ID): cv.string,
-            }
-        ),
-    )
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_REFRESH_ALL,
-        handle_refresh_all,
-    )
