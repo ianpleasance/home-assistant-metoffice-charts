@@ -49,10 +49,11 @@ class MavisChartsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             username = user_input[CONF_USERNAME].strip()
             password = user_input[CONF_PASSWORD]
 
-            auth_token = await self.hass.async_add_executor_job(
+            result = await self.hass.async_add_executor_job(
                 authenticate, username, password
             )
-            if auth_token:
+            if result:
+                auth_token, _ = result
                 selected = user_input.get(CONF_CHARTS, DEFAULT_CHARTS) or DEFAULT_CHARTS
                 return self.async_create_entry(
                     title="MAVIS Aviation Charts",
@@ -112,10 +113,11 @@ class MavisChartsOptionsFlow(config_entries.OptionsFlow):
             username = user_input[CONF_USERNAME].strip()
             password = user_input[CONF_PASSWORD]
 
-            auth_token = await self.hass.async_add_executor_job(
+            result = await self.hass.async_add_executor_job(
                 authenticate, username, password
             )
-            if auth_token:
+            if result:
+                auth_token, _ = result
                 new_data = {
                     **current,
                     CONF_USERNAME: username,

@@ -6,7 +6,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
@@ -37,7 +37,8 @@ def _entry_data(entry: ConfigEntry) -> dict:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up MAVIS Aviation Charts from a config entry."""
     data = _entry_data(entry)
-    session = async_get_clientsession(hass)
+    # Use a dedicated session so MAVIS cookies don't interfere with other integrations
+    session = async_create_clientsession(hass)
 
     coordinator = MavisChartsCoordinator(
         hass,
@@ -59,6 +60,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
+    # Register the refresh service (only once, when first entry is set up)
+    if not hass.services.has_service(DOMAIN, "refresh"):
+        async def handle_refresh(call) -> None:
+            """Handle the refresh service call — re-auth and re-download all charts."""
+            for coordinator in hass.data.get(DOMAIN, {}).values():
+                _LOGGER.info("Manual refresh triggered via service call")
+                # Force re-authentication then update
+                refreshed = await coordinator._refresh_auth_token()
+                if refreshed:
+                    await coordinator.async_refresh()
+                else:
+                    _LOGGER.error("Manual refresh failed — could not re-authenticate")
+
+        hass.services.async_register(DOMAIN, "refresh", handle_refresh)
+
     return True
 
 
@@ -66,6 +82,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        # Remove the service if no entries remain
+        if not hass.data.get(DOMAIN):
+            hass.services.async_remove(DOMAIN, "refresh")
     return unload_ok
 
 
@@ -95,5 +114,4 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
                         )
             coordinator.update_charts(new_charts)
 
-    await async_unload_entry(hass, entry)
-    await async_setup_entry(hass, entry)
+    await hass.config_entries.async_reload(entry.entry_id)

@@ -2,14 +2,9 @@
 from __future__ import annotations
 
 from datetime import timedelta
-import http.client
-import http.cookiejar
 import logging
 import os
 import re
-import urllib.error
-import urllib.parse
-import urllib.request
 from typing import Any
 
 import aiofiles
@@ -21,7 +16,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .auth import authenticate
 from .const import (
     DOMAIN,
     STORAGE_DIR,
@@ -33,9 +27,6 @@ _LOGGER = logging.getLogger(__name__)
 
 REPAIR_ISSUE_ID = "auth_token_expired"
 PDF_DPI = 150
-
-
-
 
 
 class MavisChartsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -65,20 +56,31 @@ class MavisChartsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.charts = charts
         self.entry_id = entry_id
         self._auth_token = auth_token
+        self._auth_expired_mid_cycle = False
 
         self.storage_path = hass.config.path(STORAGE_DIR)
         os.makedirs(self.storage_path, exist_ok=True)
 
+        # Fall back to file-persisted token if none provided (e.g. after HA restart
+        # where the config entry token may be stale)
+        if not self._auth_token:
+            self._auth_token = self._load_persisted_token() or ""
         if self._auth_token:
             self._inject_cookie()
 
-    def _inject_cookie(self) -> None:
-        """Inject the auth_token cookie into the aiohttp session."""
-        self.session.cookie_jar.update_cookies(
-            {"auth_token": self._auth_token},
-            response_url=aiohttp.client.URL(MAVIS_BASE_URL),
+    def _inject_cookies(self, cookies: dict[str, str]) -> None:
+        """Inject all MAVIS session cookies into the aiohttp session."""
+        url = aiohttp.client.URL(MAVIS_BASE_URL)
+        self.session.cookie_jar.update_cookies(cookies, response_url=url)
+        auth_present = any(c.key == "auth_token" for c in self.session.cookie_jar)
+        _LOGGER.debug(
+            "Injected %d MAVIS cookies. auth_token present: %s",
+            len(cookies), auth_present,
         )
-        _LOGGER.debug("Injected MAVIS auth_token cookie into session")
+
+    def _inject_cookie(self) -> None:
+        """Inject just the auth_token cookie (used on startup from saved token)."""
+        self._inject_cookies({"auth_token": self._auth_token})
 
     def update_charts(self, charts: list[str]) -> None:
         """Update the chart list, cleaning up files for removed charts."""
@@ -102,23 +104,45 @@ class MavisChartsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # Authentication
     # ------------------------------------------------------------------
 
-    def _authenticate_sync(self) -> str | None:
+    def _authenticate_sync(self) -> tuple[str, dict[str, str]] | None:
         """Run B2C login synchronously via auth.py. Called via async_add_executor_job."""
         return authenticate(self.username, self.password)
 
     async def _refresh_auth_token(self) -> bool:
-        """Run B2C login in executor and update the session cookie.
+        """Run B2C login in executor and establish session with aiohttp.
 
-        Retries up to 3 times with a short delay — B2C occasionally rejects
-        the first attempt if a previous session is still cached server-side.
+        The urllib-based login sets the auth_token cookie in a urllib session.
+        We then use that token to make a request via our aiohttp session so
+        MAVIS's server associates the auth_token with our aiohttp session.
+
+        Retries up to 3 times with a short delay.
         """
         import asyncio
         for attempt in range(1, 4):
-            token = await self.hass.async_add_executor_job(self._authenticate_sync)
-            if token:
+            result = await self.hass.async_add_executor_job(self._authenticate_sync)
+            if result:
+                token, all_cookies = result
                 self._auth_token = token
-                self._inject_cookie()
+                self._inject_cookies(all_cookies)
                 await self._persist_token(token)
+
+                # Warm up the aiohttp session by GETting MAVIS home page.
+                # This causes MAVIS to associate the auth_token with our
+                # aiohttp session via its own session management.
+                try:
+                    async with self.session.get(
+                        MAVIS_BASE_URL,
+                        allow_redirects=False,
+                        timeout=aiohttp.ClientTimeout(total=15),
+                    ) as resp:
+                        _LOGGER.debug(
+                            "Session warmup response: %d, cookies now: %d",
+                            resp.status,
+                            sum(1 for _ in self.session.cookie_jar),
+                        )
+                except aiohttp.ClientError as err:
+                    _LOGGER.warning("Session warmup request failed: %s", err)
+
                 return True
             if attempt < 3:
                 _LOGGER.warning(
@@ -129,33 +153,54 @@ class MavisChartsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return False
 
     async def _persist_token(self, token: str) -> None:
-        """Save the refreshed token to the config entry data."""
-        from .const import CONF_AUTH_TOKEN
-        entries = self.hass.config_entries.async_entries(DOMAIN)
-        for entry in entries:
-            if entry.entry_id == self.entry_id:
-                updated = {**entry.data, **entry.options, CONF_AUTH_TOKEN: token}
-                self.hass.config_entries.async_update_entry(entry, data=updated)
-                _LOGGER.debug("Persisted refreshed auth_token to config entry")
-                break
+        """Save the refreshed token to a file so it survives HA restarts.
+
+        We deliberately avoid async_update_entry here because that fires
+        the update listener and triggers a full integration reload, which
+        would interrupt any in-progress download cycle.
+        """
+        token_file = os.path.join(self.storage_path, ".auth_token")
+        try:
+            async with aiofiles.open(token_file, "w") as f:
+                await f.write(token)
+            _LOGGER.debug("Persisted refreshed auth_token to file")
+        except OSError as err:
+            _LOGGER.warning("Could not persist auth_token to file: %s", err)
+
+    def _load_persisted_token(self) -> str | None:
+        """Load a previously saved auth token from file."""
+        token_file = os.path.join(self.storage_path, ".auth_token")
+        try:
+            with open(token_file) as f:
+                token = f.read().strip()
+                return token if token else None
+        except OSError:
+            return None
 
     # ------------------------------------------------------------------
     # Auth check
     # ------------------------------------------------------------------
 
     async def _check_auth(self) -> bool:
-        """Verify the auth token is still valid."""
+        """Verify the auth token is still valid.
+
+        We disable redirect following so that a 302 to the login domain
+        does not cause aiohttp to clear our session cookies.
+        """
         if not self._auth_token:
             return False
         try:
             async with self.session.get(
-                MAVIS_BASE_URL,
-                allow_redirects=True,
+                f"{MAVIS_BASE_URL}/reports/f214",
+                allow_redirects=False,
                 timeout=aiohttp.ClientTimeout(total=15),
             ) as resp:
-                if "login.auth.metoffice.cloud" in str(resp.url):
-                    return False
-                return True
+                # 200 = authenticated, 302 to login domain = expired
+                if resp.status == 302:
+                    location = resp.headers.get("Location", "")
+                    if "login.auth.metoffice.cloud" in location:
+                        return False
+                return resp.status == 200
         except aiohttp.ClientError as err:
             _LOGGER.error("Network error checking MAVIS auth: %s", err)
             return False
@@ -184,20 +229,29 @@ class MavisChartsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             page_url = f"{page_url}?region={region}"
 
         try:
+            # Debug: check cookie is present before request
+            cookies_present = {c.key: c.value[:10] for c in self.session.cookie_jar
+                               if c.key == "auth_token"}
+            _LOGGER.debug("Cookies before request for %s: %s", report_path, cookies_present)
             async with self.session.get(
                 page_url,
                 timeout=aiohttp.ClientTimeout(total=20),
-                allow_redirects=True,
+                allow_redirects=False,
             ) as resp:
-                if "login.auth.metoffice.cloud" in str(resp.url):
-                    _LOGGER.warning(
-                        "Auth expired fetching report page for %s", report_path
-                    )
+                if resp.status in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("Location", "")
+                    if "login.auth.metoffice.cloud" in location:
+                        _LOGGER.warning(
+                            "Auth expired fetching report page for %s", report_path
+                        )
+                        self._auth_expired_mid_cycle = True
+                    else:
+                        _LOGGER.warning(
+                            "Unexpected redirect for %s: %s", report_path, location
+                        )
                     return None, None
                 if resp.status == 403:
-                    _LOGGER.warning(
-                        "Access denied (403) for %s", report_path
-                    )
+                    _LOGGER.warning("Access denied (403) for %s", report_path)
                     return None, None
                 if resp.status != 200:
                     _LOGGER.warning(
@@ -272,7 +326,7 @@ class MavisChartsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return False
 
     # ------------------------------------------------------------------
-    # Chart download
+    # Regional pressure scraping
     # ------------------------------------------------------------------
 
     async def _fetch_regional_pressure(
@@ -280,35 +334,28 @@ class MavisChartsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         chart_key: str,
         data: dict[str, Any],
     ) -> None:
-        """Scrape regional pressure values from the MAVIS RPS page.
-
-        The page renders an interactive map with pressure readings embedded
-        directly in the HTML — no downloadable file exists.  We parse the
-        data-testid attributes to extract current and next hour values for
-        each of the 20 regions.
-        """
+        """Scrape regional pressure values from the MAVIS RPS page."""
         page_url = f"{MAVIS_BASE_URL}/products/rps"
         try:
             async with self.session.get(
                 page_url,
                 timeout=aiohttp.ClientTimeout(total=20),
-                allow_redirects=True,
+                allow_redirects=False,
             ) as resp:
-                if "login.auth.metoffice.cloud" in str(resp.url):
-                    _LOGGER.warning("Auth expired fetching RPS page")
+                if resp.status in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("Location", "")
+                    if "login.auth.metoffice.cloud" in location:
+                        _LOGGER.warning("Auth expired fetching RPS page")
+                        self._auth_expired_mid_cycle = True
                     return
                 if resp.status != 200:
                     _LOGGER.warning("RPS page returned HTTP %s", resp.status)
                     return
                 html = await resp.text()
 
-            # Extract validity period from table caption
-            validity_match = re.search(
-                r"starting from ([^.]+)[.]", html
-            )
+            validity_match = re.search(r"starting from ([^.]+)[.]", html)
             validity = validity_match.group(1).strip() if validity_match else None
 
-            # Extract current and next pressure for each region
             regions: dict[str, dict[str, str]] = {}
             cur_pat = re.compile(
                 r'data-testid="map-current-pressure-([^"]+)"[^>]*>[^0-9]*([0-9]+)[^0-9]*<'
@@ -344,6 +391,10 @@ class MavisChartsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except aiohttp.ClientError as err:
             _LOGGER.error("Network error fetching RPS page: %s", err)
 
+    # ------------------------------------------------------------------
+    # Chart download
+    # ------------------------------------------------------------------
+
     async def _download_chart(
         self,
         chart_key: str,
@@ -367,10 +418,13 @@ class MavisChartsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             async with self.session.get(
                 download_url,
                 timeout=aiohttp.ClientTimeout(total=60),
-                allow_redirects=True,
+                allow_redirects=False,
             ) as resp:
-                if "login.auth.metoffice.cloud" in str(resp.url):
-                    _LOGGER.warning("Auth expired downloading %s", chart_key)
+                if resp.status in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("Location", "")
+                    if "login.auth.metoffice.cloud" in location:
+                        _LOGGER.warning("Auth expired downloading %s", chart_key)
+                        self._auth_expired_mid_cycle = True
                     return
                 if resp.status == 404:
                     _LOGGER.warning(
@@ -442,19 +496,8 @@ class MavisChartsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # Update cycle
     # ------------------------------------------------------------------
 
-    async def _async_update_data(self) -> dict[str, Any]:
-        """Ensure auth is valid, refreshing via B2C if needed, then download charts."""
-        if not await self._check_auth():
-            _LOGGER.info("MAVIS auth_token invalid or expired, refreshing via B2C")
-            refreshed = await self._refresh_auth_token()
-            if not refreshed:
-                self._raise_repair_issue()
-                raise UpdateFailed(
-                    "MAVIS authentication failed. "
-                    "Check your username and password in the integration settings."
-                )
-
-        data: dict[str, Any] = {}
+    async def _run_downloads(self, data: dict[str, Any]) -> None:
+        """Download all configured charts into data dict."""
         for chart_key in self.charts:
             if chart_key not in CHART_DEFINITIONS:
                 _LOGGER.warning("Unknown chart key '%s', skipping", chart_key)
@@ -464,5 +507,33 @@ class MavisChartsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 await self._fetch_regional_pressure(chart_key, data)
             else:
                 await self._download_chart(chart_key, data)
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Ensure auth is valid, refreshing via B2C if needed, then download charts."""
+        if not await self._check_auth():
+            _LOGGER.info("MAVIS auth_token invalid, refreshing via B2C")
+            if not await self._refresh_auth_token():
+                self._raise_repair_issue()
+                raise UpdateFailed(
+                    "MAVIS authentication failed. "
+                    "Check your username and password in the integration settings."
+                )
+
+        self._auth_expired_mid_cycle = False
+        data: dict[str, Any] = {}
+        await self._run_downloads(data)
+
+        # If auth expired mid-cycle, re-auth and retry
+        if self._auth_expired_mid_cycle:
+            _LOGGER.info("Auth expired mid-cycle, re-authenticating and retrying")
+            if await self._refresh_auth_token():
+                self._auth_expired_mid_cycle = False
+                data = {}
+                await self._run_downloads(data)
+            else:
+                self._raise_repair_issue()
+                raise UpdateFailed(
+                    "MAVIS session expired and re-authentication failed."
+                )
 
         return data

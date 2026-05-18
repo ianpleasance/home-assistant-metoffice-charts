@@ -29,7 +29,7 @@ _USER_AGENT = (
 )
 
 
-def authenticate(username: str, password: str) -> str | None:
+def authenticate(username: str, password: str) -> tuple[str, dict[str, str]] | None:
     """Log into MAVIS via Azure B2C and return the auth_token cookie.
 
     This function is synchronous and blocking — run it in an executor:
@@ -161,18 +161,24 @@ def authenticate(username: str, password: str) -> str | None:
             e.read()  # consume response body
 
         # ------------------------------------------------------------------
-        # Step 6 — Extract auth_token from cookie jar
+        # Step 6 — Extract auth_token and all MAVIS cookies from cookie jar
         # ------------------------------------------------------------------
+        auth_token = None
+        all_cookies: dict[str, str] = {}
         for cookie in jar:
+            all_cookies[cookie.name] = cookie.value
             if cookie.name == "auth_token":
-                _LOGGER.info("MAVIS authentication successful")
-                return cookie.value
+                auth_token = cookie.value
 
-        _LOGGER.error(
-            "auth_token not found after B2C login. Cookies present: %s",
-            [c.name for c in jar],
-        )
-        return None
+        if not auth_token:
+            _LOGGER.error(
+                "auth_token not found after B2C login. Cookies present: %s",
+                list(all_cookies.keys()),
+            )
+            return None
+
+        _LOGGER.info("MAVIS authentication successful")
+        return auth_token, all_cookies
 
     except Exception as err:  # pylint: disable=broad-except
         _LOGGER.error("MAVIS B2C authentication error: %s", err)

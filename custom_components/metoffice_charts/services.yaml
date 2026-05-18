@@ -1,0 +1,4 @@
+refresh:
+  name: Refresh Charts
+  description: Force an immediate re-authentication and download of all configured MAVIS charts.
+  fields: {}
