@@ -1,4 +1,16 @@
-refresh:
-  name: Refresh Charts
-  description: Force an immediate re-authentication and download of all configured MAVIS charts.
-  fields: {}
+# Describes the services available for Met Office Charts
+refresh_order:
+  name: Refresh Order
+  description: Manually fetch new weather charts for a specific order.
+  fields:
+    order_id:
+      name: Order ID
+      description: The order ID to refresh (e.g., 'my-weather-maps').
+      required: true
+      example: "my-weather-maps"
+      selector:
+        text:
+
+refresh_all:
+  name: Refresh All
+  description: Manually fetch new weather charts for all configured orders.

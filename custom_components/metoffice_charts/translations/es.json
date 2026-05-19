@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configuración de Met Office Charts",
+        "description": "Configure sus credenciales de Met Office DataHub.\n\nNecesita una cuenta DataHub con una suscripción a Map Images. Regístrese en: {register_url}\n\nIntervalo de actualización en minutos (mín: {min_interval}, máx: {max_interval}).",
+        "data": {
+          "api_key": "Clave API de DataHub",
+          "order_id": "ID de pedido",
+          "scan_interval": "Intervalo de actualización (minutos)"
+        },
+        "data_description": {
+          "api_key": "Su clave API de Met Office DataHub desde la configuración de la cuenta",
+          "order_id": "Nombre del pedido en minúsculas con guiones (ej: 'mis-mapas-del-tiempo')",
+          "scan_interval": "Con qué frecuencia buscar nuevas imágenes de mapas"
+        }
+      }
+    },
+    "error": {
+      "invalid_api_key": "Clave API inválida. Por favor, verifique la configuración de su cuenta DataHub.",
+      "order_not_found": "ID de pedido no encontrado. Por favor, verifique que el pedido existe en su cuenta DataHub.",
+      "cannot_connect": "No se puede conectar a Met Office DataHub. Por favor, verifique su conexión a Internet e intente nuevamente.",
+      "unknown": "Se produjo un error inesperado. Por favor, intente nuevamente."
+    },
+    "abort": {
+      "already_configured": "Este pedido ya está configurado"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones de Met Office Charts",
+        "description": "Actualice el intervalo de actualización para Met Office Charts.\n\nIntervalo de actualización en minutos (mín: {min_interval}, máx: {max_interval}).",
+        "data": {
+          "scan_interval": "Intervalo de actualización (minutos)"
+        },
+        "data_description": {
+          "scan_interval": "Con qué frecuencia buscar nuevas imágenes de mapas"
+        }
+      }
+    }
+  },
+  "services": {
+    "refresh_order": {
+      "name": "Actualizar pedido",
+      "description": "Obtener manualmente nuevos mapas meteorológicos para un pedido específico",
+      "fields": {
+        "order_id": {
+          "name": "ID de pedido",
+          "description": "El ID de pedido a actualizar"
+        }
+      }
+    },
+    "refresh_all": {
+      "name": "Actualizar todo",
+      "description": "Obtener manualmente nuevos mapas meteorológicos para todos los pedidos configurados"
+    }
+  }
+}

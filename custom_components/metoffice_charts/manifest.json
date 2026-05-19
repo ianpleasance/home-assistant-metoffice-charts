@@ -1,13 +1,13 @@
 {
-  "domain": "mavis_charts",
-  "name": "MAVIS Aviation Charts",
+  "domain": "metoffice_charts",
+  "name": "Met Office Charts",
   "codeowners": ["@ianpleasance"],
   "config_flow": true,
-  "dependencies": [],
-  "documentation": "https://github.com/ianpleasance/home-assistant-mavis-charts",
+  "documentation": "https://github.com/ianpleasance/hass-metoffice-charts",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/ianpleasance/home-assistant-mavis-charts/issues",
-  "requirements": ["aiofiles", "pymupdf"],
-  "version": "0.2.0"
+  "issue_tracker": "https://github.com/ianpleasance/hass-metoffice-charts/issues",
+  "requirements": [],
+  "version": "1.0.1",
+  "homeassistant": "2024.1.0"
 }
