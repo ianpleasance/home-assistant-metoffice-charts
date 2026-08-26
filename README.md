@@ -1,8 +1,8 @@
 # Met Office Charts for Home Assistant
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![GitHub release](https://img.shields.io/github/release/ianpleasance/hass-metoffice-charts.svg)](https://github.com/ianpleasance/hass-metoffice-charts/releases)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-c62828.svg)](https://github.com/hacs/integration)
+[![version](https://img.shields.io/github/v/release/ianpleasance/home-assistant-metoffice-charts?display_name=tag&sort=semver&color=blue&label=version)](https://github.com/ianpleasance/home-assistant-metoffice-charts/releases/latest)
+[![license](https://img.shields.io/github/license/ianpleasance/home-assistant-metoffice-charts)](LICENSE)
 
 A Home Assistant integration for downloading weather chart images from the Met Office DataHub. Display surface pressure maps, rainfall radar, satellite imagery, and more in your dashboards.
 
